@@ -7,6 +7,11 @@
 (setq ant_hist_len 8)
 (setq grid_files '("grid_a.txt" "grid_b.txt" "grid_c.txt" "grid_d.txt"))
 
+;; agent format concept is a list with the following: (ROW COL HISTORY MODE)
+;; Where ROW and COL are integers that define the current location of the agent
+;; HISTORY is a list of past moves up to length ant_hist_len
+;; MODE is a character where #\f indicates foraging, and #\r indicates returning
+
 (defun read_maze (name)
     "Reads in a maze file and creates a list of lists where each element is the following format:
         (CHAR VALUE)
@@ -24,14 +29,18 @@
                    (setq maze_line '())))
     maze_data))
 
+(defun fuzz_value ()
+    "Returns a random fuzzing value between -0.8 and 0.8"
+    (/ (- (random 161) 80) 100.0))
+
 (defun update_cells (maze_data)
     "Returns a copy of the given maze data with all of its cell values updated based on evaporation/natural spread"
     (let ((maze_cp (copy-tree maze_data))   ; copy original maze data
           (sr_val nil))
         (loop for i from 0 to (- (length maze_cp) 1)
             do (loop for j from 0 to (- (length (nth i maze_cp)) 1)
-                do (print "before")
-                do (print (cadr (nth j (nth i maze_cp))))
+                do (print "before") ; debug
+                do (print (cadr (nth j (nth i maze_cp))))   ; debug
                 do (if (< (cadr (nth j (nth i maze_cp))) 1)
                         (setf (nth 1 (nth j (nth i maze_cp))) 0) ; if cell val less than 1, 0 out
                     (progn
@@ -55,8 +64,8 @@
                             (setf 
                                 (nth 1 (nth (+ j 1) (nth i maze_cp))) 
                                 (+ (nth 1 (nth (+ j 1) (nth i maze_cp))) evap_e)))))
-                    do (print "after")
-                    do (print (cadr (nth j (nth i maze_cp))))))
+                    do (print "after")  ; debug
+                    do (print (cadr (nth j (nth i maze_cp)))))) ; debug
             maze_cp))   ; return new maze with values
 
 (defun get_neighbor_cells (i j cell_hist maze)
@@ -70,25 +79,53 @@
         maze - the current maze data"
     (let ((options '()))
         (if (> i 0)
-            (if (not (member (car (nth j (nth (- i 1) maze))) cell_hist :test 'equal))
+            (if (optionp (- i 1) j cell_hist maze)  ; cell one row up
                 (setq options (cons (list (- i 1) j) options))))
         (if (> j 0)
-            (if (not (member (car (nth (- j 1) (nth i maze))) cell_hist :test 'equal))
+            (if (optionp i (- j 1) cell_hist maze)  ; cell one col left
                 (setq options (cons (list i (- j 1)) options))))
         (if (< (+ i 1) (length maze))
-            (if (not (member (car (nth j (nth (+ i 1) maze))) cell_hist :test 'equal))
+            (if (optionp (+ i 1) j cell_hist maze)  ; cell one row down
                 (setq options (cons (list (+ i 1) j) options))))
         (if (< (+ j 1) (length (nth i maze)))
-            (if (not (member (car (nth (+ j 1) (nth i maze))) cell_hist :test 'equal))
+            (if (optionp i (+ j 1) cell_hist maze)  ; cell one col right
                 (setq options (cons (list i (+ j 1)) options))))
         options))
 
+(defun optionp (i j cell_hist maze)
+    "This predicate function returns true if the given i, j coordinates 
+    are possible to navigate to, and are not in the given cell history"
+    (and 
+        (not (member (list i j) cell_hist :test 'equal)) 
+        (not (char= #\x (car (nth j (nth i) maze))))))
+
+(defun pos_deltamax (agent cell)
+    "Returns the difference between the maximum coordinate in the given destination cell
+    and the agent's current cell"
+    (- (max (nth 0 cell) (nth 1 cell)) (max (nth 0 agent) (nth 1 agent))))
+
+(defun pos_deltasum (agent cell)
+    "Returns the difference between the sum of the coordinates in the destination cell
+    and the agent's current cell"
+    (- (+ (nth 0 cell) (nth 1 cell)) (+ (nth 0 agent) (nth 1 agent))))
+
+(defun cell_val_heuristic (agent i j maze)
+    ; TODO: forage/return heuristic
+    )
+
 (defun choose_target_cell (agent maze)
-    (let ((opt_cells (get_neighbor_cells (nth 0 agent) (nth 1 agent) (nth 2 agent) maze)))
-        (if (not options)
-            ; TODO: Handle no options found that are not in history
-            ; TODO: Choose target cell based on heuristic 
-            )))
+    (let ((opt_cells (get_neighbor_cells (nth 0 agent) (nth 1 agent) (nth 2 agent) maze))
+          (updated_agent (copy-tree agent)))
+        (if (not opt_cells)
+            (progn
+                (setf (nth 2 updated_agent) '()) ; clear cell history and get options again
+                (setq opt_cells (get_neighbor_cells 
+                                    (nth 0 updated_agent) 
+                                    (nth 1 updated_agent) 
+                                    (nth 2 updated_agent) 
+                                    maze))))
+        ; TODO: Choose target cell based on heuristic 
+        ))
 
 (setq tester (read_maze "grid_a.txt"))
-(print (update_cells tester))
+(print (update_cells tester))   ; if all cell values are 0 this should just return the maze data unchanged
