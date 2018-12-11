@@ -7,10 +7,11 @@
 (setq ant_hist_len 8)
 (setq grid_files '("grid_a.txt" "grid_b.txt" "grid_c.txt" "grid_d.txt"))
 
-;; agent format concept is a list with the following: (ROW COL HISTORY MODE)
+;; agent format concept is a list with the following: (ROW COL HISTORY MODE PATH)
 ;; Where ROW and COL are integers that define the current location of the agent
 ;; HISTORY is a list of past moves up to length ant_hist_len
 ;; MODE is a character where #\f indicates foraging, and #\r indicates returning
+;; PATH is the path the agent has traversed up to the current point in time
 
 (defun read_maze (name)
     "Reads in a maze file and creates a list of lists where each element is the following format:
@@ -109,13 +110,39 @@
     and the agent's current cell"
     (- (+ (nth 0 cell) (nth 1 cell)) (+ (nth 0 agent) (nth 1 agent))))
 
-(defun cell_val_heuristic (agent i j maze)
-    ; TODO: forage/return heuristic
-    )
+(defun cell_val_heuristic (agent coordinate maze)
+    "Perform heuristic calculation of a cell at the given coordinate in a maze
+     based on the given agent's setting ('forage' or 'return')"
+    (let ((i (nth 0 coordinate))
+          (j (nth 1 coordinate)))
+        (if (char= #\f (nth 3 agent))
+            (+ (pos_deltamax agent i j)
+                (* scent_bal (nth 1 (nth j (nth i maze)))) (fuzz_value))
+        (+ (pos_deltasum agent i j)
+            (* scent_bal (nth 1 (nth j (nth i maze)))) (fuzz_value)))))
+
+(defun check_goal (agent maze)
+    "Check if the given agent is at the goal state in the given maze"
+    (and (= (nth 0 agent) (- (length maze) 1))
+         (= (nth 1 agent) (- (length (nth (nth 1 agent) maze)) 1))))
+
+(defun move_agent (agent n_cell)
+    "Move the agent to a new cell and modify its history values accordingly"
+    (setf (nth 0 agent) (nth 0 n_cell))
+    (setf (nth 1 agent) (nth 1 n_cell))
+    (setf (nth 3 agent) (cons n_cell (nth 3 agent)))
+    (setf (nth 4 agent (cons n_cell (nth 4 agent))))
+    (if (> (length (nth 3 agent) ant_hist_len))
+        (setf (nth 3 agent) (butlast (nth 3 agent) 1))))
 
 (defun choose_target_cell (agent maze)
+    "Find the cell which is the highest score adjacent to the given agent 
+    and return the coordinates for that cell"
     (let ((opt_cells (get_neighbor_cells (nth 0 agent) (nth 1 agent) (nth 2 agent) maze))
-          (updated_agent (copy-tree agent)))
+          (updated_agent (copy-tree agent))
+          (best_cell nil)
+          (best_score -1)
+          (score nil))
         (if (not opt_cells)
             (progn
                 (setf (nth 2 updated_agent) '()) ; clear cell history and get options again
@@ -124,8 +151,15 @@
                                     (nth 1 updated_agent) 
                                     (nth 2 updated_agent) 
                                     maze))))
-        ; TODO: Choose target cell based on heuristic 
-        ))
+        (loop for cell in opt_cells
+        do (setq score (cell_val_heuristic agent cell maze))
+            (if (< best_score score)
+                (progn 
+                    (setq best_cell cell)
+                    (setq best_score score))))
+        best_cell))
+
+; TODO: Main function for iteration through maze
 
 (setq tester (read_maze "grid_a.txt"))
 (print (update_cells tester))   ; if all cell values are 0 this should just return the maze data unchanged
