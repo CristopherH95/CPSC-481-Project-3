@@ -113,7 +113,7 @@
     (let ((i (nth 0 coordinate))
           (j (nth 1 coordinate)))
         (if (char= #\f (nth 3 agent))   ; if forage, use deltamax
-            (+ (pos_deltamax agent coordinate)
+            (+ (pos_deltamax agent coordinate) 
                 (* scent_bal (nth 1 (nth j (nth i maze)))) (fuzz_value))
         (+ (pos_deltasum agent coordinate)  ; if return, use deltasum
             (* scent_bal (nth 1 (nth j (nth i maze)))) (fuzz_value)))))
@@ -123,14 +123,18 @@
     (and (= (nth 0 agent) (- (length maze) 1))  ; check if agent is at the goal position (lower right)
          (= (nth 1 agent) (- (length (nth (nth 1 agent) maze)) 1))))
 
+(defun remove_oldest (path_list)
+    "Returns a new version of the given path list with the oldest (in 0-th position) move removed"
+    (reverse (butlast (reverse path_list) 1)))
+
 (defun move_agent (agent n_cell)
     "Move the agent to a new cell and modify its history values accordingly"
-    (setf (nth 0 agent) (nth 0 n_cell)) ; TODO: Fix malformed agents causing errors during iteration
+    (setf (nth 0 agent) (nth 0 n_cell))
     (setf (nth 1 agent) (nth 1 n_cell))
-    (setf (nth 2 agent) (cons (nth 2 agent) n_cell))
-    (setf (nth 4 agent) (cons (nth 4 agent) n_cell))
+    (setf (nth 2 agent) (append (nth 2 agent) (list n_cell)))
+    (setf (nth 4 agent) (append (nth 4 agent) (list n_cell)))
     (if (> (length (nth 2 agent)) ant_hist_len)
-        (setf (nth 2 agent) (butlast (nth 2 agent) 1))))
+        (setf (nth 2 agent) (remove_oldest (nth 2 agent)))))
 
 (defun choose_target_cell (agent maze)
     "Find the cell which is the highest score adjacent to the given agent 
@@ -138,11 +142,13 @@
     (let ((opt_cells (get_neighbor_cells (nth 0 agent) (nth 1 agent) (nth 2 agent) maze))
           (updated_agent (copy-tree agent))
           (best_cell nil)
-          (best_score -1)
+          (best_score most-negative-fixnum)
           (score nil))
+        (print "calc option cells")
         (if (not opt_cells)
             (progn
-                (setf (nth 2 updated_agent) '()) ; clear cell history and get options again
+                (print "no options, resetting history. . .")
+                (setf (nth 2 updated_agent) (list (nth 0 agent) (nth 1 agent))) ; clear cell history and get options again
                 (setq opt_cells (get_neighbor_cells 
                                     (nth 0 updated_agent) 
                                     (nth 1 updated_agent) 
@@ -154,6 +160,9 @@
                 (progn 
                     (setq best_cell cell)
                     (setq best_score score))))
+        (print "best cell/score")
+        (print best_cell)
+        (print best_score)
         best_cell))
 
 (defun aco_maze (maze)
@@ -163,10 +172,16 @@
           (paths '()))
         (loop while (< (length paths) stop_goal)
         do (if (< (length agents) max_agents)
-                (setq agents (cons '(0 0 '() #\f '()) agents)))
+                (setq agents (cons '(0 0 ((0 0)) #\f ((0 0))) agents)))
            (setf (values agents paths) (update_agents agents maze paths))
+           ;(print agents)
            (setq maze (update_cells maze)))
      paths))
+
+(defun print_agent_pos (agents)
+    (print "agents:")
+    (loop for agent in agents
+    do (format T "~d ~d~C~C" (nth 0 agent) (nth 1 agent) #\return #\linefeed)))
 
 (defun update_agents (agents maze paths)
     "Updates the given agents in the given maze, 
@@ -186,12 +201,12 @@
                     (setf (nth 1 (nth j (nth i maze))) (+ cell_score scent_d))))
             (setq targ_cell (choose_target_cell agent maze))
             (move_agent agent targ_cell)
-            (if (check_goal agent maze)
+            (if (check_goal agent maze) ; check if agent at goal spot
                 (progn
-                    (setq n_paths (cons (nth 4 agent) n_paths))
-                    (setf (nth 3 agent) #\r)
-                    (setf (nth 4 agent) '())
-                    (setf (nth 2 agent) '()))))
+                    (setq n_paths (append (nth 4 agent) (list n_paths)))    ; add path to paths list
+                    (setf (nth 3 agent) #\r)    ; set to return mode
+                    (setf (nth 4 agent) (list (list (nth 0 agent) (nth 1 agent))))  ; reset history to current spot
+                    (setf (nth 2 agent) (list (list (nth 0 agent) (nth 1 agent)))))))
         (values n_agents n_paths)))
 
 (defun find_shortest (paths)
@@ -217,5 +232,4 @@
            (print "Shortest path")
            (print (find_shortest maze_paths)))))
 
-;(trace check_goal pos_deltasum pos_deltamax get_neighbor_cells update_cells)
 (test_mazes)    ; run test
