@@ -162,9 +162,9 @@
                 (progn 
                     (setq best_cell cell)
                     (setq best_score score))))
-        (print "best cell/score")
-        (print best_cell)
-        (print best_score)
+        ;; (print "best cell/score")
+        ;; (print best_cell)
+        ;; (print best_score)
         best_cell))
 
 (defun aco_maze (maze)
@@ -177,6 +177,9 @@
         do (if (< (length agents) max_agents)
                 (setq agents (cons '(0 0 ((0 0)) #\f) agents)))
            (setf (values agents goal_found) (update_agents agents n_maze goal_found))
+           (print "agents updated")
+           (print agents)
+           (print goal_found)
            (setq n_maze (update_cells n_maze)))
      n_maze))
 
