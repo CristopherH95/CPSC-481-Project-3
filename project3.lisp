@@ -4,7 +4,7 @@
 (defconstant evap_e 0.1)
 (defconstant stop_goal 30)
 (defconstant scent_bal 0.1)
-(defconstant ant_hist_len 8)
+(defconstant ant_hist_len 20)
 (defconstant max_agents 50)
 (defconstant grid_files '("grid_a.txt" "grid_b.txt" "grid_c.txt" "grid_d.txt"))
 
@@ -120,8 +120,11 @@
 
 (defun check_goal (agent maze)
     "Check if the given agent is at the goal state in the given maze"
-    (and (= (nth 0 agent) (- (length maze) 1))  ; check if agent is at the goal position (lower right)
-         (= (nth 1 agent) (- (length (nth (nth 1 agent) maze)) 1))))
+    (if (char= #\f (nth 3 agent)) 
+        (and (= (nth 0 agent) (- (length maze) 1))  ; check if agent is at the goal position (lower right)
+             (= (nth 1 agent) (- (length (nth (nth 1 agent) maze)) 1)))
+     (and (= (nth 0 agent) 0)
+          (= (nth 1 agent) 0))))
 
 (defun remove_oldest (path_list)
     "Returns a new version of the given path list with the oldest (in 0-th position) move removed"
@@ -132,7 +135,6 @@
     (setf (nth 0 agent) (nth 0 n_cell))
     (setf (nth 1 agent) (nth 1 n_cell))
     (setf (nth 2 agent) (append (nth 2 agent) (list n_cell)))
-    (setf (nth 4 agent) (append (nth 4 agent) (list n_cell)))
     (if (> (length (nth 2 agent)) ant_hist_len)
         (setf (nth 2 agent) (remove_oldest (nth 2 agent)))))
 
@@ -169,29 +171,30 @@
     "Iterate through the given maze using a swarm of up to max_agents number of agents
     returns a list of paths found from the agents once complete"
     (let ((agents '())
-          (paths '()))
-        (loop while (< (length paths) stop_goal)
+          (goal_found 0)
+          (n_maze (copy-tree maze)))
+        (loop while (< goal_found stop_goal)
         do (if (< (length agents) max_agents)
-                (setq agents (cons '(0 0 ((0 0)) #\f ((0 0))) agents)))
-           (setf (values agents paths) (update_agents agents maze paths))
-           ;(print agents)
-           (setq maze (update_cells maze)))
-     paths))
+                (setq agents (cons '(0 0 ((0 0)) #\f) agents)))
+           (setf (values agents goal_found) (update_agents agents n_maze goal_found))
+           (setq n_maze (update_cells n_maze)))
+     n_maze))
 
 (defun print_agent_pos (agents)
     (print "agents:")
     (loop for agent in agents
     do (format T "~d ~d~C~C" (nth 0 agent) (nth 1 agent) #\return #\linefeed)))
 
-(defun update_agents (agents maze paths)
+(defun update_agents (agents maze goal_counter)
     "Updates the given agents in the given maze, 
-    returns a list containing the new agents and any newly found paths"
+    returns a list containing the new agents and a counter of the times the goal has been found,
+    updated with any occurrences from this"
     (let ((n_agents (copy-tree agents))
           (cell_score 0)
           (i nil)
           (j nil)
           (targ_cell nil)
-          (n_paths (copy-tree paths)))
+          (counter goal_counter))
         (loop for agent in n_agents
         do  (setq i (nth 0 agent))
             (setq j (nth 1 agent))
@@ -202,20 +205,63 @@
             (setq targ_cell (choose_target_cell agent maze))
             (move_agent agent targ_cell)
             (if (check_goal agent maze) ; check if agent at goal spot
-                (progn
-                    (setq n_paths (append (nth 4 agent) (list n_paths)))    ; add path to paths list
-                    (setf (nth 3 agent) #\r)    ; set to return mode
-                    (setf (nth 4 agent) (list (list (nth 0 agent) (nth 1 agent))))  ; reset history to current spot
-                    (setf (nth 2 agent) (list (list (nth 0 agent) (nth 1 agent)))))))
-        (values n_agents n_paths)))
+                (if (char= #\f (nth 3 agent))
+                    (progn
+                        (setf (nth 3 agent) #\r)    ; set to return mode
+                        (setf (nth 2 agent) (list (list (nth 0 agent) (nth 1 agent))))
+                        (setq goal_counter (+ goal_counter 1)))
+                 (progn
+                    (setf (nth 3 agent) #\f)
+                    (setf (nth 2 agent) (list (list 0 0)))
+                    (setq goal_counter (+ goal_counter 1))))))
+        (values n_agents goal_counter)))
 
-(defun find_shortest (paths)
-    "Find and return the shortest path out of a list of paths"
-    (let ((shortest nil))
-        (loop for path in paths
-        do (if (< (length path) (length shortest))
-                (setq shortest path)))
-     shortest))
+(defun get_open_cells (maze i j)
+    "Returns a list of cells in the given maze that are both adjacent to i, j and not obstacles"
+    (let ((options nil))
+        (if (> i 0)
+            (if (not (char= #\x (nth 0 (nth j (nth (- i 1) maze)))))
+                (setq options (append options (list (list (- i 1) j))))))
+        (if (> j 0)
+            (if (not (char= #\x (nth 0 (nth (- j 1) (nth i maze)))))
+                (setq options (append options (list (list i (- j 1)))))))
+        (if (< i (- (length maze) 1))
+            (if (not (char= #\x (nth 0 (nth j (nth (+ i 1) maze)))))
+                (setq options (append options (list (list (+ i 1) j))))))
+        (if (< j (- (length (nth i maze)) 1))
+            (if (not (char= #\x (nth 0 (nth (+ j 1) (nth i maze)))))
+                (setq options (append options (list (list i (+ j 1)))))))
+     options))
+
+(defun score_from_coordinate (coordinate maze)
+    "Return the score value at the given coordinate of the form (ROW COL)"
+    (nth 1 (nth (nth 1 coordinate) (nth (nth 0 coordinate) maze))))
+
+(defun find_shortest (maze)
+    "Find and return the shortest path from a maze which has been traversed with ACO"
+    (let ((coordinate '(0 0))
+          (next_cell nil)
+          (next_cell_score nil)
+          (options nil)
+          (path '((0 0))))
+        (loop while (not (and 
+                            (= (nth 0 coordinate) (- (length maze) 1))
+                            (= (nth 1 coordinate) (- (length (nth (nth 0 coordinate) maze)) 1))))
+        do (setq options (get_open_cells maze (nth 0 coordinate) (nth 1 coordinate)))
+           (loop for opt in options
+           do (if (not next_cell)
+                    (progn 
+                        (setq next_cell opt)
+                        (setq next_cell_score (score_from_coordinate opt maze)))
+                (progn
+                    (if (< next_cell_score (score_from_coordinate opt maze))
+                        (progn
+                            (setq next_cell opt)
+                            (setq next_cell_score (score_from_coordinate opt maze)))))))
+           (setq path (append path (list next_cell)))
+           (setq next_cell nil)
+           (setq next_cell_score nil))
+        path))
 
 (defun test_mazes ()
     "Iterate through the test files define in grid_files and print out the paths found, and the shortest path
@@ -226,10 +272,8 @@
         do (print "Reading maze. . .")
            (setq maze (read_maze file))
            (print "Starting path searching process. . .")
-           (setq maze_paths (aco_maze maze))
-           (format T "Paths found for file ~s~C~C" file #\return #\linefeed)
-           (print maze_paths)
+           (setq maze (aco_maze maze))
            (print "Shortest path")
-           (print (find_shortest maze_paths)))))
+           (print (find_shortest maze)))))
 
 (test_mazes)    ; run test
