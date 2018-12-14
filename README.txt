@@ -21,7 +21,7 @@ Build:
 	Executable from the command line without compilation. 
   	However, a compiled version can be created using:
 
-  	(COMPILE-FILE "project2.lisp")
+  	(COMPILE-FILE "project3.lisp")
 
   	In a Common Lisp REPL
 
@@ -41,11 +41,11 @@ Setup:
 Usage:
   	run on command line:
 
-  	clisp project2.lisp
+  	clisp project3.lisp
 
   	load compiled .fas in REPL:
 
-  	(LOAD "project2.fas")
+  	(LOAD "project3.fas")
 
 Extra Features:
   	None
