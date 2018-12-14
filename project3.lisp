@@ -1,4 +1,10 @@
+;;;; project2.lisp
+;;;; Written by: Cristopher Hernandez & Suyash Singh
+;;;; Contact: cristopherh@csu.fullerton.edu, suyash.vardhansingh@csu.fullerton.edu
+;;;; Defines helper functions, and the main function, for reading in test grid files and 
+;;;; perfoming an ACO algorithm on the maze to find a path from start to finish
 
+;;; constant parameters
 
 (defconstant scent_d 10)
 (defconstant evap_e 0.1)
@@ -7,6 +13,8 @@
 (defconstant ant_hist_len 20)
 (defconstant max_agents 50)
 (defconstant grid_files '("grid_a.txt" "grid_b.txt" "grid_c.txt" "grid_d.txt"))
+
+;;; functions
 
 ;; agent format concept is a list with the following: (ROW COL HISTORY MODE PATH)
 ;; Where ROW and COL are integers that define the current location of the agent
@@ -146,10 +154,8 @@
           (best_cell nil)
           (best_score most-negative-fixnum)
           (score nil))
-        (print "calc option cells")
         (if (not opt_cells)
             (progn
-                (print "no options, resetting history. . .")
                 (setf (nth 2 updated_agent) (list (nth 0 agent) (nth 1 agent))) ; clear cell history and get options again
                 (setq opt_cells (get_neighbor_cells 
                                     (nth 0 updated_agent) 
@@ -162,10 +168,9 @@
                 (progn 
                     (setq best_cell cell)
                     (setq best_score score))))
-        ;; (print "best cell/score")
-        ;; (print best_cell)
-        ;; (print best_score)
         best_cell))
+
+;;; main ACO function for a given maze
 
 (defun aco_maze (maze)
     "Iterate through the given maze using a swarm of up to max_agents number of agents
@@ -177,14 +182,10 @@
         do (if (< (length agents) max_agents)
                 (setq agents (cons '(0 0 ((0 0)) #\f) agents)))
            (setf (values agents goal_found) (update_agents agents n_maze goal_found))
-           (print "agents updated")
-           (print agents)
-           (print goal_found)
            (setq n_maze (update_cells n_maze)))
      n_maze))
 
 (defun print_agent_pos (agents)
-    (print "agents:")
     (loop for agent in agents
     do (format T "~d ~d~C~C" (nth 0 agent) (nth 1 agent) #\return #\linefeed)))
 
@@ -265,6 +266,8 @@
            (setq next_cell nil)
            (setq next_cell_score nil))
         path))
+
+;;; main test function for maze files
 
 (defun test_mazes ()
     "Iterate through the test files define in grid_files and print out the paths found, and the shortest path
